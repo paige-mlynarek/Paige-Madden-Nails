@@ -279,6 +279,22 @@
   .switch-dot { position: absolute; top: 3px; left: 3px; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .18s; }
   .switch.on .switch-dot { transform: translateX(17px); }
 
+  /* ---- customer notification templates (Settings) ---- */
+  .nt-list { display: flex; flex-direction: column; gap: 16px; padding: 4px 0; }
+  .nt-card { border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); padding: 16px 18px; transition: opacity .15s; }
+  .nt-card.off { opacity: .55; }
+  .nt-head { display: flex; align-items: center; gap: 10px; }
+  .nt-head .switch { margin-left: auto; }
+  .nt-hint { font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); margin: 9px 0 14px; }
+  .nt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .nt-edit { display: flex; flex-direction: column; }
+  .nt-lbl { font-size: 11.5px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; color: var(--ink-soft); margin: 12px 0 5px; }
+  .nt-edit .nt-lbl:first-child { margin-top: 0; }
+  .nt-area { resize: vertical; min-height: 96px; line-height: 1.5; font-family: inherit; }
+  .nt-preview-wrap { position: sticky; top: 8px; }
+  .nt-preview { width: 100%; height: 460px; border: 1px solid var(--line); border-radius: 12px; background: #F2ECE6; }
+  @media (max-width: 720px) { .nt-grid { grid-template-columns: 1fr; } .nt-preview { height: 380px; } }
+
   /* ===================== NOTIFICATIONS ===================== */
   .pop { position: absolute; top: 52px; right: 0; width: 360px; max-width: 90vw; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-pop); z-index: 60; overflow: hidden; transform-origin: top right; }
   .pop-h { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--hair); }
@@ -377,19 +393,28 @@ var I = {
 
 /* ───────────────────────── status meta ───────────────────────── */
 var STATUS = {
-  new:        { label:'New',         color:'#3B7DD8', bg:'#EAF1FC' },
-  quoted:     { label:'Quoted',      color:'#C98A12', bg:'#FBF1DC' },
-  in_progress:{ label:'In Progress', color:'#7C5CDA', bg:'#EDEAFB' },
-  ready:      { label:'Ready',       color:'#0E9E8E', bg:'#E1F4F1' },
-  completed:  { label:'Completed',   color:'#2BA05A', bg:'#E5F4EA' },
-  cancelled:  { label:'Cancelled',   color:'#C9534A', bg:'#FBE9E7' }
+  new:            { label:'New',             color:'#3B7DD8', bg:'#EAF1FC' },
+  in_progress:    { label:'In Progress',     color:'#7C5CDA', bg:'#EDEAFB' },
+  ready_to_ship:  { label:'Ready to Ship',   color:'#0E9E8E', bg:'#E1F4F1' },
+  ready_for_label:{ label:'Ready for Label', color:'#C98A12', bg:'#FBF1DC' },
+  completed:      { label:'Completed',       color:'#2BA05A', bg:'#E5F4EA' },
+  cancelled:      { label:'Cancelled',       color:'#C9534A', bg:'#FBE9E7' }
 };
-var FLOW = ['new','quoted','in_progress','ready','completed'];
+// Status flow branches on fulfillment: shipping orders end at the
+// label step; pickup orders end at completed.
+function flowFor(o){
+  return o && o.fulfillment === 'shipping'
+    ? ['new','in_progress','ready_to_ship','ready_for_label']
+    : ['new','in_progress','completed'];
+}
+// Full ordered status set (drives tabs, the pipeline chart, and the
+// editable notification templates). Each one carries a customer email.
+var ALL_STATUSES = ['new','in_progress','ready_to_ship','ready_for_label','completed','cancelled'];
 
 /* ───────────────────────── state ───────────────────────── */
 var state = {
   user: null, ready: false, loading: true,
-  orders: [], tiers: [], shapes: [], payments: [],
+  orders: [], tiers: [], shapes: [], payments: [], templates: [],
   view: 'dashboard', filter: 'all', q: '',
   range: 30, sidebarOpen: false, notifOpen: false,
   drawerId: null, photos: {}
@@ -469,13 +494,15 @@ function loadAll(){
     sb.from('orders').select('*').order('created_at',{ascending:false}),
     sb.from('design_tiers').select('*'),
     sb.from('nail_shapes').select('*'),
-    sb.from('payment_methods').select('*').order('sort')
+    sb.from('payment_methods').select('*').order('sort'),
+    sb.from('notification_templates').select('*').order('sort')
   ]).then(function(res){
     if(res[0].error) throw res[0].error;
-    state.orders   = res[0].data || [];
-    state.tiers    = res[1].data || [];
-    state.shapes   = res[2].data || [];
-    state.payments = res[3].data || [];
+    state.orders    = res[0].data || [];
+    state.tiers     = res[1].data || [];
+    state.shapes    = res[2].data || [];
+    state.payments  = res[3].data || [];
+    state.templates = res[4].data || [];
     state.loading = false;
     render();
   }).catch(function(e){
@@ -561,7 +588,7 @@ function donut(parts, total){
 function viewDashboard(){
   var c = counts();
   var revenue = state.orders.filter(function(o){return o.status==='completed';}).reduce(function(s,o){return s+orderValue(o);},0);
-  var pipeline = state.orders.filter(function(o){return ['new','quoted','in_progress','ready'].indexOf(o.status)>=0;}).reduce(function(s,o){return s+orderValue(o);},0);
+  var pipeline = state.orders.filter(function(o){return ['new','in_progress','ready_to_ship','ready_for_label'].indexOf(o.status)>=0;}).reduce(function(s,o){return s+orderValue(o);},0);
   var avg = c.completed ? revenue/c.completed : 0;
   // last 7d vs prior 7d order count trend
   var now=Date.now(), d7=7*864e5;
@@ -575,12 +602,12 @@ function viewDashboard(){
   };
   var kpis = '<div class="kpis">'+
     kpi(I.cash,'#E5F4EA','#2BA05A','Revenue (completed)', money(revenue), c.completed+' completed order'+(c.completed===1?'':'s'))+
-    kpi(I.spark,'#FBF1DC','#C98A12','Open pipeline', money(pipeline), (c.new+c.quoted+c.in_progress+c.ready)+' active')+
+    kpi(I.spark,'#FBF1DC','#C98A12','Open pipeline', money(pipeline), (c.new+c.in_progress+c.ready_to_ship+c.ready_for_label)+' active')+
     kpi(I.cart,'#EAF1FC','#3B7DD8','Total orders', c.all, '<span class="trend '+(tr>=0?'up':'down')+'">'+(tr>=0?'▲':'▼')+' '+Math.abs(tr)+'%</span> last 7 days')+
     kpi(I.bell,'#FBE9EA','#B46869','Needs attention', c.new, c.new?'New order'+(c.new===1?'':'s')+' to review':'All caught up ✨')+
   '</div>';
 
-  var parts = FLOW.concat(['cancelled']).map(function(k){ return {name:STATUS[k].label, v:c[k], color:STATUS[k].color}; });
+  var parts = ALL_STATUSES.map(function(k){ return {name:STATUS[k].label, v:c[k], color:STATUS[k].color}; });
   var legend = parts.map(function(p){
     var pct = c.all? Math.round(p.v/c.all*100):0;
     return '<div class="legend-row"><span class="dot" style="background:'+p.color+'"></span><span class="lg-name">'+p.name+'</span><span class="lg-val">'+p.v+'</span><span class="lg-pct">'+pct+'%</span></div>';
@@ -629,7 +656,7 @@ function viewDashboard(){
 
 function viewOrders(){
   var c = counts();
-  var tabDef = [{k:'all',label:'All'}].concat(FLOW.concat(['cancelled']).map(function(k){return {k:k,label:STATUS[k].label};}));
+  var tabDef = [{k:'all',label:'All'}].concat(ALL_STATUSES.map(function(k){return {k:k,label:STATUS[k].label};}));
   var tabs = tabDef.map(function(t){
     var col = t.k==='all'? 'var(--rose)' : STATUS[t.k].color;
     return '<button class="tab '+(state.filter===t.k?'on':'')+'" data-filter="'+t.k+'">'+
@@ -692,11 +719,43 @@ function viewSettings(){
     '</div>';
   }).join('');
 
+  var ntCards = ALL_STATUSES.map(function(s){
+    var t = tplFor(s);
+    var on = t.enabled !== false;
+    var m = STATUS[s];
+    return '<div class="nt-card'+(on?'':' off')+'" data-nt="'+s+'">'+
+      '<div class="nt-head">'+
+        '<span class="pill" style="background:'+m.bg+';color:'+m.color+'"><span class="pdot" style="background:'+m.color+'"></span>'+m.label+'</span>'+
+        '<button class="switch'+(on?' on':'')+'" data-nt-toggle="'+s+'" role="switch" aria-checked="'+(on?'true':'false')+'"><span class="switch-dot"></span></button>'+
+      '</div>'+
+      '<p class="nt-hint">'+esc(NT_HINT[s]||'')+'</p>'+
+      '<div class="nt-grid">'+
+        '<div class="nt-edit">'+
+          '<label class="nt-lbl">Email subject</label>'+
+          '<input class="input" data-nt-subject value="'+esc(t.subject||'')+'" placeholder="Subject line">'+
+          '<label class="nt-lbl">Heading</label>'+
+          '<input class="input" data-nt-heading value="'+esc(t.heading||'')+'" placeholder="Big headline in the email">'+
+          '<label class="nt-lbl">Message</label>'+
+          '<textarea class="input nt-area" data-nt-body rows="5" placeholder="What the customer reads">'+esc(t.body||'')+'</textarea>'+
+          '<button class="btn" data-nt-save="'+s+'" style="margin-top:10px">Save</button>'+
+        '</div>'+
+        '<div class="nt-preview-wrap"><div class="nt-lbl">Live preview</div>'+
+          '<iframe class="nt-preview" data-nt-preview title="Email preview" sandbox="allow-same-origin"></iframe>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
   return '<div class="view">'+
     '<div class="panel" style="max-width:680px">'+
       '<div class="panel-h"><div class="panel-t">Payment handles'+
         '<small>Shown on the checkout payment screen. Turn one off to hide it; leave a handle blank and it stays hidden until you fill it in.</small></div></div>'+
       '<div class="panel-b"><div class="pm-list">'+cards+'</div></div>'+
+    '</div>'+
+    '<div class="panel" style="max-width:880px;margin-top:16px">'+
+      '<div class="panel-h"><div class="panel-t">Customer notifications'+
+        '<small>One on-brand email per status. Edit the wording, watch the live preview, and Save. Turn one off to skip that email. These send automatically once email delivery is connected.</small></div></div>'+
+      '<div class="panel-b"><div class="nt-list">'+ntCards+'</div></div>'+
     '</div>'+
     '<div class="panel" style="max-width:680px;margin-top:16px"><div class="panel-b" style="padding:18px"><div class="panel-t" style="font-size:14px;margin-bottom:4px">Account</div><p class="muted" style="font-size:13.5px">Signed in as <b>'+esc(state.user.email)+'</b>. Manage design tiers, nail shapes and pricing from the Supabase dashboard.</p></div></div>'+
   '</div>';
@@ -734,6 +793,138 @@ function savePayment(id, btn){
       else { state.payments.push({id:id, handle:handle||null, enabled:enabled}); }
       toast((PAY_BRAND[id]?id.charAt(0).toUpperCase()+id.slice(1):'Method')+' saved', handle?('Handle: '+handle):'Handle cleared', 'ok');
     });
+}
+
+/* ───────────────────────── customer notifications ───────────────────────── */
+// One editable template per status. Paige edits subject/heading/message in
+// Settings; renderEmailHtml() wraps the message in the on-brand HTML shell.
+// A short hint shown under each template card in Settings.
+var NT_HINT = {
+  new:             'Sent the moment an order comes in.',
+  in_progress:     'Sent when you start painting the set.',
+  ready_to_ship:   'Sent when a shipping order is finished and packed.',
+  ready_for_label: 'Sent when a shipping order is on its way (includes tracking if available).',
+  completed:       'Sent when a pickup order is ready, or any order is marked done.',
+  cancelled:       'Sent if you cancel an order.'
+};
+
+function tplFor(status){
+  return (state.templates || []).find(function(t){ return t.status===status; })
+    || { status:status, subject:'', heading:'', body:'', enabled:true };
+}
+
+// A representative order so the preview shows a realistic email.
+function sampleOrderFor(status){
+  var o = { customer_name:'Ava Bennett', order_no:491, tier_price:120,
+    fulfillment: status==='ready_for_label'||status==='ready_to_ship' ? 'shipping' : 'pickup' };
+  if(status==='ready_for_label'){ o.tracking_number='9400 1000 0000 0000 0000 00'; o.tracking_url='https://tools.usps.com/go/TrackConfirmAction'; }
+  return o;
+}
+
+// The single source of truth for the branded email — used by both the
+// Settings live preview and (later) the real send.
+function renderEmailHtml(tpl, order){
+  order = order || {};
+  var heading = esc(tpl.heading || '');
+  var bodyHtml = esc(tpl.body || '').replace(/\n/g, '<br>');
+  var orderNo = order.order_no!=null ? 'Order PM-'+order.order_no : '';
+  var name = esc(order.customer_name || 'there');
+  var tracking = '';
+  if(tpl.status==='ready_for_label' && order.tracking_url){
+    tracking =
+      '<tr><td style="padding:8px 0 4px">'+
+        '<a href="'+esc(order.tracking_url)+'" style="display:inline-block;background:#B46869;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 26px;border-radius:999px;font-family:\'Hanken Grotesk\',Helvetica,Arial,sans-serif">Track your package</a>'+
+      '</td></tr>'+
+      (order.tracking_number ? '<tr><td style="padding:2px 0 0;color:#8C6A60;font-size:12.5px;font-family:\'Hanken Grotesk\',Helvetica,Arial,sans-serif">Tracking: '+esc(order.tracking_number)+'</td></tr>' : '');
+  }
+  return '<!doctype html><html><head><meta charset="utf-8">'+
+    '<meta name="viewport" content="width=device-width,initial-scale=1">'+
+    '<link href="https://fonts.googleapis.com/css2?family=Pinyon+Script&family=Cormorant+Garamond:wght@600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">'+
+    '<style>body{margin:0;padding:0;}</style></head>'+
+    '<body style="margin:0;padding:0;background:#EBE2D9;background:linear-gradient(160deg,#F2ECE6 0%,#E7DDD4 100%);font-family:\'Hanken Grotesk\',Helvetica,Arial,sans-serif;color:#5F463F;">'+
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(160deg,#F2ECE6 0%,#E7DDD4 100%)"><tr><td align="center" style="padding:34px 16px">'+
+      '<table role="presentation" width="520" cellpadding="0" cellspacing="0" style="width:520px;max-width:520px;background:#FFFDFB;border-radius:24px;overflow:hidden;box-shadow:0 18px 48px rgba(95,70,63,0.16)">'+
+        // header band
+        '<tr><td align="center" style="background:#B46869;padding:30px 24px 26px">'+
+          '<div style="font-family:\'Pinyon Script\',cursive;color:#FFF;font-size:40px;line-height:1">Paige Madden</div>'+
+          '<div style="font-family:\'Hanken Grotesk\',Helvetica,Arial,sans-serif;color:rgba(255,255,255,0.86);font-size:12px;letter-spacing:4px;text-transform:uppercase;margin-top:2px">Nails</div>'+
+        '</td></tr>'+
+        // body
+        '<tr><td style="padding:34px 38px 16px">'+
+          (orderNo ? '<div style="display:inline-block;background:#FBF1F0;color:#B46869;font-size:12px;font-weight:600;letter-spacing:.4px;padding:5px 12px;border-radius:999px;font-family:\'Hanken Grotesk\',Helvetica,Arial,sans-serif">'+orderNo+'</div>' : '')+
+          '<h1 style="font-family:\'Cormorant Garamond\',Georgia,serif;font-weight:700;color:#5F463F;font-size:30px;line-height:1.2;margin:16px 0 4px">'+heading+'</h1>'+
+          '<p style="font-family:\'Hanken Grotesk\',Helvetica,Arial,sans-serif;color:#8C6A60;font-size:15.5px;line-height:1.65;margin:10px 0 0">Hi '+name+',</p>'+
+          '<p style="font-family:\'Hanken Grotesk\',Helvetica,Arial,sans-serif;color:#8C6A60;font-size:15.5px;line-height:1.65;margin:8px 0 0">'+bodyHtml+'</p>'+
+          (tracking ? '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:20px">'+tracking+'</table>' : '')+
+        '</td></tr>'+
+        // sign-off + footer
+        '<tr><td style="padding:14px 38px 30px">'+
+          '<p style="font-family:\'Cormorant Garamond\',Georgia,serif;color:#B46869;font-size:21px;margin:8px 0 0">With love, Paige 💕</p>'+
+          '<hr style="border:none;border-top:1px solid #EEE3DA;margin:22px 0 14px">'+
+          '<p style="font-family:\'Hanken Grotesk\',Helvetica,Arial,sans-serif;color:#B8A79E;font-size:11.5px;line-height:1.55;margin:0">You\'re receiving this because you placed an order with Paige Madden Nails.</p>'+
+        '</td></tr>'+
+      '</table>'+
+    '</td></tr></table>'+
+    '</body></html>';
+}
+
+// Fired on every status change. No-op send for now; flip on later.
+function notifyCustomer(order, status){
+  var tpl = tplFor(status);
+  if(!tpl || tpl.enabled===false) return;        // template turned off → don't notify
+  if(!order || !order.email) return;             // no email on file → nothing to send
+  var html = renderEmailHtml(tpl, order);
+  // TODO: wire provider here so the email actually sends automatically.
+  // A Supabase edge function keeps the API key server-side, e.g.:
+  //   sb.functions.invoke('send-order-email', { body:{ to:order.email, subject:tpl.subject, html:html } });
+  // Until that's built, this is intentionally a no-op (logged for sanity).
+  console.log('[notifyCustomer] would email', order.email, '·', tpl.subject, '· '+html.length+' bytes');
+}
+
+function toggleTemplate(status, btn){
+  var card = $('[data-nt="'+status+'"]'); if(!card) return;
+  var on = !btn.classList.contains('on');
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-checked', on?'true':'false');
+  card.classList.toggle('off', !on);
+  sb.from('notification_templates').update({ enabled: on, updated_at: new Date().toISOString() }).eq('status', status)
+    .then(function(r){
+      if(r.error){ toast('Couldn’t update', r.error.message, 'err'); return; }
+      var t = state.templates.find(function(x){return x.status===status;});
+      if(t) t.enabled = on;
+      toast((STATUS[status]?STATUS[status].label:status)+(on?' notification on':' notification off'), '', 'ok');
+    });
+}
+
+function saveTemplate(status, btn){
+  var card = $('[data-nt="'+status+'"]'); if(!card) return;
+  var subject = card.querySelector('[data-nt-subject]').value.trim();
+  var heading = card.querySelector('[data-nt-heading]').value.trim();
+  var body    = card.querySelector('[data-nt-body]').value.trim();
+  var enabled = card.querySelector('[data-nt-toggle]').classList.contains('on');
+  if(!subject || !heading || !body){ toast('Add a subject, heading and message', '', 'err'); return; }
+  btn.disabled = true; var orig = btn.textContent; btn.innerHTML = '<span class="spin"></span>';
+  sb.from('notification_templates').update({ subject:subject, heading:heading, body:body, enabled:enabled, updated_at:new Date().toISOString() }).eq('status', status)
+    .then(function(r){
+      btn.disabled = false; btn.textContent = orig;
+      if(r.error){ toast('Couldn’t save', r.error.message, 'err'); return; }
+      var t = state.templates.find(function(x){return x.status===status;});
+      if(t){ t.subject=subject; t.heading=heading; t.body=body; t.enabled=enabled; }
+      else { state.templates.push({status:status, subject:subject, heading:heading, body:body, enabled:enabled}); }
+      toast((STATUS[status]?STATUS[status].label:status)+' notification saved', '', 'ok');
+    });
+}
+
+// Re-render a card's live preview iframe from its current input values.
+function refreshTemplatePreview(status){
+  var card = $('[data-nt="'+status+'"]'); if(!card) return;
+  var frame = card.querySelector('[data-nt-preview]'); if(!frame) return;
+  var draft = {
+    status: status,
+    heading: card.querySelector('[data-nt-heading]').value,
+    body: card.querySelector('[data-nt-body]').value
+  };
+  frame.srcdoc = renderEmailHtml(draft, sampleOrderFor(status));
 }
 
 /* ───────────────────────── drawer ───────────────────────── */
@@ -813,8 +1004,9 @@ function renderDrawer(){
   else if(ph.length){ photosHtml='<div class="photos">'+ph.map(function(u){return u?'<a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="inspiration"></a>':'<div class="ph-ph">no preview</div>';}).join('')+'</div>'; }
   else { photosHtml='<div class="muted" style="font-size:12.5px">No inspiration photos.</div>'; }
 
-  var curIdx = FLOW.indexOf(o.status);
-  var steps = FLOW.map(function(s,i){
+  var flow = flowFor(o);
+  var curIdx = flow.indexOf(o.status);
+  var steps = flow.map(function(s,i){
     var cls = o.status===s?'cur':(o.status==='cancelled'?'':(i<curIdx?'done':''));
     return '<button class="step '+cls+'" data-status="'+s+'">'+STATUS[s].label+'</button>';
   }).join('');
@@ -923,8 +1115,12 @@ function updateOrder(id, patch, okMsg){
 function setStatus(id, status){
   var patch = { status: status };
   var o = state.orders.find(function(x){return x.id===id;});
-  if(status==='completed' && o && o.quoted_price==null){ patch.quoted_price = o.tier_price; }
+  // Both endpoints (pickup → completed, shipping → ready_for_label) are
+  // "finished" — lock in the tier price as the quote if none was set.
+  if((status==='completed' || status==='ready_for_label') && o && o.quoted_price==null){ patch.quoted_price = o.tier_price; }
   updateOrder(id, patch, 'Moved to '+(STATUS[status]?STATUS[status].label:status));
+  // Tell the customer about the new status (no-op until sending is wired).
+  if(o) notifyCustomer(Object.assign({}, o, patch), status);
 }
 function markSeen(ids){
   ids.forEach(function(id){ var i=state.orders.findIndex(function(x){return x.id===id;}); if(i>=0)state.orders[i].admin_seen=true; });
@@ -1023,6 +1219,13 @@ function wire(){
   document.querySelectorAll('[data-pm-save]').forEach(function(b){ b.onclick=function(){ savePayment(b.getAttribute('data-pm-save'), b); }; });
   document.querySelectorAll('[data-pm-toggle]').forEach(function(b){ b.onclick=function(){ togglePayment(b.getAttribute('data-pm-toggle'), b); }; });
   document.querySelectorAll('[data-pm-handle]').forEach(function(inp){ inp.onkeydown=function(e){ if(e.key==='Enter'){ var id=inp.getAttribute('data-pm-handle'); var sv=$('[data-pm-save="'+id+'"]'); if(sv) savePayment(id, sv); } }; });
+  document.querySelectorAll('[data-nt-save]').forEach(function(b){ b.onclick=function(){ saveTemplate(b.getAttribute('data-nt-save'), b); }; });
+  document.querySelectorAll('[data-nt-toggle]').forEach(function(b){ b.onclick=function(){ toggleTemplate(b.getAttribute('data-nt-toggle'), b); }; });
+  document.querySelectorAll('[data-nt]').forEach(function(card){
+    var s = card.getAttribute('data-nt');
+    card.querySelectorAll('[data-nt-heading],[data-nt-body]').forEach(function(inp){ inp.oninput=function(){ refreshTemplatePreview(s); }; });
+    refreshTemplatePreview(s); // paint the initial preview
+  });
 
   var bell=$('#bell'); if(bell) bell.onclick=function(e){ e.stopPropagation(); state.notifOpen=!state.notifOpen; renderNotif(); };
   var burger=$('#burger'); if(burger) burger.onclick=function(e){ e.stopPropagation(); state.sidebarOpen=!state.sidebarOpen; var s=$('#sidebar'); if(s)s.classList.toggle('open',state.sidebarOpen); };
