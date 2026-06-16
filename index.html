@@ -618,6 +618,54 @@
   .recap__k { color: var(--ink-soft); width: 96px; flex-shrink: 0; font-weight: 500; }
   .recap__v { color: var(--ink); font-weight: 600; flex: 1; }
 
+  /* ── Order number (thank-you) ── */
+  .ordernum {
+    width: 100%;
+    margin: 22px 0 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .ordernum__label {
+    font-family: var(--serif);
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-bottom: 9px;
+  }
+  .ordernum__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    border: 1.5px solid var(--rose-30);
+    background: #FBF1F0;
+    border-radius: 14px;
+    padding: 12px 18px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: background .15s ease, border-color .15s ease, transform .1s ease;
+  }
+  .ordernum__chip:active { transform: scale(0.98); }
+  .ordernum__chip.copied { border-color: var(--rose); background: #F7E7E6; }
+  .ordernum__code {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--rose);
+    font-variant-numeric: tabular-nums;
+  }
+  .ordernum__ico { display: flex; color: var(--rose); }
+  .ordernum__hint {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    margin: 11px 0 0;
+    max-width: 34ch;
+  }
+
   /* ── Step transition ── */
   @keyframes stepIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -855,43 +903,46 @@
     if (!sb) return Promise.reject(new Error('Supabase client unavailable'));
     var tier = TIERS.filter(function (t) { return t.id === data.tier; })[0] || TIERS[0];
     var shipping = data.fulfillment === 'shipping';
-    var orderId = uuid();
-    var row = {
-      id: orderId,
-      customer_name: data.name.trim(),
-      email: data.email.trim() || null,
-      phone: data.phone.trim() || null,
-      nail_shape: data.shape || null,
-      design_tier: data.tier,
-      tier_price: tier.price,
-      sizes: data.sizes,
-      notes: data.notes.trim() || null,
-      fulfillment: data.fulfillment,
-      ship_speed: shipping ? data.shipSpeed : null,
-      ship_to_name: shipping ? data.name.trim() : null,
-      address_line1: shipping ? (data.address1.trim() || null) : null,
-      address_line2: shipping ? (data.address2.trim() || null) : null,
-      city: shipping ? (data.city.trim() || null) : null,
-      region: shipping ? (data.state.trim() || null) : null,
-      postal_code: shipping ? (data.zip.trim() || null) : null,
-      country: shipping ? 'US' : null
-    };
-    return sb.from('orders').insert(row).then(function (res) {
+    // Insert via the create_order RPC so we get back the sequential
+    // order number (PM-###) even though RLS is insert-only and can't
+    // read the row back. Returns { id, order_no }.
+    return sb.rpc('create_order', {
+      p_customer_name: data.name.trim(),
+      p_email: data.email.trim() || null,
+      p_phone: data.phone.trim() || null,
+      p_nail_shape: data.shape || null,
+      p_design_tier: data.tier,
+      p_tier_price: tier.price,
+      p_sizes: data.sizes,
+      p_notes: data.notes.trim() || null,
+      p_fulfillment: data.fulfillment,
+      p_ship_speed: shipping ? data.shipSpeed : null,
+      p_ship_to_name: shipping ? data.name.trim() : null,
+      p_address_line1: shipping ? (data.address1.trim() || null) : null,
+      p_address_line2: shipping ? (data.address2.trim() || null) : null,
+      p_city: shipping ? (data.city.trim() || null) : null,
+      p_region: shipping ? (data.state.trim() || null) : null,
+      p_postal_code: shipping ? (data.zip.trim() || null) : null,
+      p_country: shipping ? 'US' : null
+    }).then(function (res) {
       if (res.error) throw res.error;
-      if (!photos.length) return orderId;
+      var rec = Array.isArray(res.data) ? res.data[0] : res.data;
+      if (!rec || !rec.id) throw new Error('Order insert returned no id');
+      var order = { id: rec.id, order_no: rec.order_no };
+      if (!photos.length) return order;
       var uploads = photos.map(function (p, i) {
-        var path = orderId + '/' + (i + 1) + '.jpg';
+        var path = order.id + '/' + (i + 1) + '.jpg';
         return sb.storage.from('inspiration')
           .upload(path, p.blob, { contentType: 'image/jpeg', upsert: false })
           .then(function (up) {
             if (up.error) throw up.error;
-            return { order_id: orderId, storage_path: path, position: i };
+            return { order_id: order.id, storage_path: path, position: i };
           });
       });
       return Promise.all(uploads).then(function (rows) {
         return sb.from('order_photos').insert(rows).then(function (pr) {
           if (pr.error) throw pr.error;
-          return orderId;
+          return order;
         });
       });
     });
@@ -934,6 +985,8 @@
     check: '<svg width="40" height="40" viewBox="0 0 40 40" fill="none"><path d="M12 20.5l5.5 5.5L28 14.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     camera:'<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 7.5A1.5 1.5 0 014.5 6h2l1.2-1.8A1 1 0 019 3.8h4a1 1 0 01.9.5L15 6h2.5A1.5 1.5 0 0119 7.5v8A1.5 1.5 0 0117.5 17h-13A1.5 1.5 0 013 15.5v-8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="11" cy="11.2" r="3" stroke="currentColor" stroke-width="1.6"/></svg>',
     bag:   '<svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M4 6h10l-.8 8.2a1.4 1.4 0 01-1.4 1.3H6.2a1.4 1.4 0 01-1.4-1.3L4 6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6.5 6V5a2.5 2.5 0 015 0v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    copy:  '<svg width="15" height="15" viewBox="0 0 18 18" fill="none"><rect x="6.4" y="6.4" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.6 6.4V4.6a2 2 0 00-2-2H4.6a2 2 0 00-2 2v5a2 2 0 002 2h1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    checkSm:'<svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M4 9.5l3.2 3.2L14 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     instagram: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="2.5" width="19" height="19" rx="5.4" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.8"/><circle cx="17.4" cy="6.6" r="1.25" fill="currentColor"/></svg>',
     truck: '<svg width="19" height="17" viewBox="0 0 20 18" fill="none"><path d="M2 5.5A1.5 1.5 0 013.5 4h7A1.5 1.5 0 0112 5.5V13H2V5.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 7.5h3.2a1.5 1.5 0 011.3.8L18 11v2h-6V7.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="6" cy="14" r="1.6" stroke="currentColor" stroke-width="1.5"/><circle cx="14.5" cy="14" r="1.6" stroke="currentColor" stroke-width="1.5"/></svg>',
   };
@@ -967,6 +1020,9 @@
   var photos = [];                // { id, url, blob, name } — not persisted
   var showErr = false;
   var sending = false;
+  var lastOrder = null;           // { id, order_no } from the most recent submit
+
+  function orderLabel(no) { return 'PM-' + no; }
 
   function persist() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: step, data: data })); }
@@ -1360,6 +1416,15 @@
         '<div class="thanks__seal" style="color:var(--rose)">' + Icon.check + '</div>' +
         '<h1 class="thanks__title">Order received</h1>' +
         '<p class="lede" style="text-align:center;margin:14px auto 0;max-width:28ch">Thank you, ' + esc(firstName) + '. I\'ll reach out at <strong style="color:var(--ink);font-weight:600">' + esc(contact) + '</strong> with a price and timing.</p>' +
+        (lastOrder && lastOrder.order_no != null ?
+          '<div class="ordernum">' +
+            '<div class="ordernum__label">Your order number</div>' +
+            '<button class="ordernum__chip" type="button" data-copy="' + esc(orderLabel(lastOrder.order_no)) + '">' +
+              '<span class="ordernum__code">' + esc(orderLabel(lastOrder.order_no)) + '</span>' +
+              '<span class="ordernum__ico">' + Icon.copy + '</span>' +
+            '</button>' +
+            '<p class="ordernum__hint">Add this to your Venmo or Zelle note when you pay, so I can match it to your set.</p>' +
+          '</div>' : '') +
         '<div class="card recap">' +
           recapRow('Tier', tierName) +
           recapRow('Shape', data.shape || 'Noted in person') +
@@ -1370,15 +1435,52 @@
         '<p class="handle">Tag your set <span style="color:var(--rose);font-weight:600">@paigemadden.nails</span></p>' +
       '</div></div>' +
       '<div class="footer"><button class="btn btn--soft" data-reset>Start another order</button></div>';
+    var copyBtn = app.querySelector('[data-copy]');
+    if (copyBtn) {
+      copyBtn.onclick = function () {
+        var codeEl = copyBtn.querySelector('.ordernum__code');
+        var icoEl = copyBtn.querySelector('.ordernum__ico');
+        var orig = codeEl.textContent;
+        copyText(copyBtn.getAttribute('data-copy')).then(function () {
+          copyBtn.classList.add('copied');
+          codeEl.textContent = 'Copied';
+          icoEl.innerHTML = Icon.checkSm;
+          setTimeout(function () {
+            copyBtn.classList.remove('copied');
+            codeEl.textContent = orig;
+            icoEl.innerHTML = Icon.copy;
+          }, 1500);
+        });
+      };
+    }
     app.querySelector('[data-reset]').onclick = function () {
       photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
       photos = [];
+      lastOrder = null;
       data = blankData();
       step = 0;
       try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
       render();
     };
     return app;
+  }
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () { return legacyCopy(text); });
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+  function legacyCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) {}
   }
   function recapRow(k, v) {
     return '<div class="recap__row"><span class="recap__k">' + k + '</span><span class="recap__v">' + esc(v) + '</span></div>';
@@ -1448,46 +1550,56 @@
     var tier = TIERS.filter(function (t) { return t.id === data.tier; })[0] || TIERS[0];
     var sizesStr = FINGERS.map(function (f) { return f + ' ' + (data.sizes[f] || '—'); }).join('  ·  ');
 
-    var fd = new FormData();
-    fd.append('_subject', 'New custom order — ' + data.name.trim());
-    fd.append('_template', 'table');
-    fd.append('_captcha', 'false');
+    function emailOrder(orderNo) {
+      var ref = orderNo != null ? orderLabel(orderNo) : null;
+      var fd = new FormData();
+      fd.append('_subject', 'New order' + (ref ? ' ' + ref : '') + ' — ' + data.name.trim());
+      fd.append('_template', 'table');
+      fd.append('_captcha', 'false');
 
-    fd.append('Name', data.name.trim());
-    if (data.email.trim()) fd.append('Email', data.email.trim());
-    if (data.phone.trim()) fd.append('Phone', data.phone.trim());
+      if (ref) fd.append('Order #', ref);
+      fd.append('Name', data.name.trim());
+      if (data.email.trim()) fd.append('Email', data.email.trim());
+      if (data.phone.trim()) fd.append('Phone', data.phone.trim());
 
-    fd.append('Delivery', data.fulfillment === 'shipping' ? 'Ship to me' : 'Booth pickup');
-    if (data.fulfillment === 'shipping') {
-      var addrBlock = [
-        data.address1.trim(),
-        data.address2.trim(),
-        [data.city.trim(), data.state.trim(), data.zip.trim()].filter(Boolean).join(', '),
-        'USA'
-      ].filter(Boolean).join('\n');
-      fd.append('Shipping address', addrBlock);
-      fd.append('Shipping speed', data.shipSpeed === 'rush' ? 'Rush (about a week, +$8)' : 'Standard (2–3 weeks)');
+      fd.append('Delivery', data.fulfillment === 'shipping' ? 'Ship to me' : 'Booth pickup');
+      if (data.fulfillment === 'shipping') {
+        var addrBlock = [
+          data.address1.trim(),
+          data.address2.trim(),
+          [data.city.trim(), data.state.trim(), data.zip.trim()].filter(Boolean).join(', '),
+          'USA'
+        ].filter(Boolean).join('\n');
+        fd.append('Shipping address', addrBlock);
+        fd.append('Shipping speed', data.shipSpeed === 'rush' ? 'Rush (about a week, +$8)' : 'Standard (2–3 weeks)');
+      }
+
+      fd.append('Nail shape', data.shape || 'Not selected');
+      fd.append('Sizes (both hands)', sizesStr);
+      fd.append('Design tier', tier.name + ' (' + money(tier.price) + ')');
+      fd.append('Notes', data.notes.trim() || '—');
+
+      photos.forEach(function (p, i) { fd.append('Photo ' + (i + 1), p.blob, 'design-' + (i + 1) + '.jpg'); });
+
+      return fetch(FORMSUBMIT_ENDPOINT, { method: 'POST', body: fd, mode: 'no-cors' })
+        .then(function () { return true; })
+        .catch(function () { return false; });
     }
 
-    fd.append('Nail shape', data.shape || 'Not selected');
-    fd.append('Sizes (both hands)', sizesStr);
-    fd.append('Design tier', tier.name + ' (' + money(tier.price) + ')');
-    fd.append('Notes', data.notes.trim() || '—');
-
-    photos.forEach(function (p, i) { fd.append('Photo ' + (i + 1), p.blob, 'design-' + (i + 1) + '.jpg'); });
-
-    // Save to Supabase (the durable order record) and email via FormSubmit,
-    // in parallel. Proceed to the thank-you if either one succeeds.
-    var emailJob = fetch(FORMSUBMIT_ENDPOINT, { method: 'POST', body: fd, mode: 'no-cors' })
-      .then(function () { return true; })
-      .catch(function () { return false; });
-    var dbJob = saveOrderToSupabase()
-      .then(function () { return true; })
-      .catch(function (e) { if (window.console) console.error('Supabase save failed:', e); return false; });
-
-    Promise.all([emailJob, dbJob]).then(function (res) {
+    // Save to Supabase first (the durable record + the order number),
+    // then email via FormSubmit with that number included. If the DB
+    // save fails, still email so the order isn't lost. Proceed to the
+    // thank-you if either one succeeds.
+    saveOrderToSupabase().then(function (order) {
+      lastOrder = order;
+      return emailOrder(order.order_no).then(function (emailed) { return { db: true, emailed: emailed }; });
+    }, function (e) {
+      if (window.console) console.error('Supabase save failed:', e);
+      lastOrder = null;
+      return emailOrder(null).then(function (emailed) { return { db: false, emailed: emailed }; });
+    }).then(function (r) {
       sending = false;
-      if (!res[0] && !res[1]) {
+      if (!r.db && !r.emailed) {
         btn.disabled = false;
         btn.textContent = 'Send my order 💖';
         hintEl.innerHTML = '<span style="color:var(--rose);font-weight:600">That didn\'t send — please check your connection and try again. 💕</span>';
