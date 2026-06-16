@@ -8,8 +8,10 @@
       C 330 360 385 175 500 175 Z"/>
     <clipPath id="nailClip"><use href="#nail"/></clipPath>
   </defs>
-  <use href="#nail" fill="#F3D7D8"/>
-  <g clip-path="url(#nailClip)">
-    <path d="M0 0 H1000 V320 Q500 400 0 320 Z" fill="#FFFFFF"/>
+  <g transform="rotate(-40 500 500)">
+    <use href="#nail" fill="#F3D7D8"/>
+    <g clip-path="url(#nailClip)">
+      <path d="M0 0 H1000 V320 Q500 400 0 320 Z" fill="#FFFFFF"/>
+    </g>
   </g>
 </svg>
