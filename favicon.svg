@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-label="Paige Madden Nails">
+  <rect width="1000" height="1000" fill="#B46869"/>
+  <defs>
+    <path id="nail" d="M500 175
+      C 615 175 670 360 672 560
+      C 674 772 632 882 500 882
+      C 368 882 326 772 328 560
+      C 330 360 385 175 500 175 Z"/>
+    <clipPath id="nailClip"><use href="#nail"/></clipPath>
+  </defs>
+  <use href="#nail" fill="#F3D7D8"/>
+  <g clip-path="url(#nailClip)">
+    <path d="M0 0 H1000 V320 Q500 400 0 320 Z" fill="#FFFFFF"/>
+  </g>
+</svg>
