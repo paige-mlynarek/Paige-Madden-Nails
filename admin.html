@@ -667,7 +667,7 @@ function viewDashboard(){
   var recent = state.orders.slice(0,6);
   var recentRows = recent.map(function(o){
     return '<tr data-open="'+o.id+'"><td data-label="Customer"><div class="cust">'+avatar(o.customer_name)+'<span class="cust-name">'+esc(o.customer_name)+'</span></div></td>'+
-      '<td data-label="Design" class="muted hide-sm">'+esc(o.nail_shape||'—')+' · '+esc((state.tiers.find(function(x){return x.id===o.design_tier;})||{}).name||o.design_tier)+'</td>'+
+      '<td data-label="Design" class="hide-sm"><span class="chip" style="color:var(--ink-soft)">'+I.palette+esc(o.nail_shape||'—')+'<span class="muted">· '+esc((state.tiers.find(function(x){return x.id===o.design_tier;})||{}).name||o.design_tier)+'</span></span></td>'+
       '<td data-label="Total"><span class="money">'+money(orderValue(o))+'</span></td>'+
       '<td data-label="Status">'+statusPill(o.status)+'</td>'+
       '<td data-label="When" class="muted hide-sm">'+ago(o.created_at)+'</td></tr>';
@@ -695,14 +695,17 @@ function viewOrders(){
   var rows = filteredOrders();
   var body = rows.length ? rows.map(function(o){
     var ship = o.fulfillment==='shipping';
+    var fulfilChip = (ship && o.label_url)
+      ? '<span class="chip" style="color:#0E9E8E" title="Label purchased">'+I.tag+'Labeled</span>'
+      : '<span class="chip">'+(ship?I.truck:I.bag)+(ship?'Ship':'Pickup')+'</span>';
     return '<tr data-open="'+o.id+'">'+
       '<td data-label="Order"><span class="oid">'+(o.admin_seen?'':'<span class="unseen-dot"></span>')+shortId(o)+'</span></td>'+
       '<td data-label="Date" class="muted hide-sm">'+fmtDate(o.created_at)+'</td>'+
       '<td data-label="Customer"><div class="cust">'+avatar(o.customer_name)+'<div><div class="cust-name">'+esc(o.customer_name)+'</div><div class="muted" style="font-size:11.5px">'+esc(o.email||o.phone||'')+'</div></div></div></td>'+
-      '<td data-label="Design" class="hide-sm">'+esc(o.nail_shape||'—')+' <span class="muted">· '+esc((state.tiers.find(function(x){return x.id===o.design_tier;})||{}).name||o.design_tier)+'</span></td>'+
+      '<td data-label="Design" class="hide-sm"><span class="chip" style="color:var(--ink-2)">'+I.palette+esc(o.nail_shape||'—')+'<span class="muted">· '+esc((state.tiers.find(function(x){return x.id===o.design_tier;})||{}).name||o.design_tier)+'</span></span></td>'+
       '<td data-label="Total"><span class="money">'+money(orderValue(o))+'</span></td>'+
       '<td data-label="Status">'+statusPill(o.status)+'</td>'+
-      '<td data-label="Fulfil" class="hide-sm"><span class="chip">'+(ship?I.truck:I.bag)+(ship?'Ship':'Pickup')+'</span></td>'+
+      '<td data-label="Fulfil" class="hide-sm">'+fulfilChip+'</td>'+
       '<td class="col-act"><div class="row-actions"><button class="ico" data-open="'+o.id+'" title="View">'+I.pencil+'</button><button class="ico danger" data-del="'+o.id+'" title="Delete">'+I.trash+'</button></div></td>'+
     '</tr>';
   }).join('') : '<tr><td colspan="8"><div class="empty">'+I.inbox+'<div>No orders match this view.</div></div></td></tr>';
