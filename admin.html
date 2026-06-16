@@ -225,8 +225,12 @@
   .dr-title { font-size: 17px; font-weight: 800; }
   .dr-meta { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
   .dr-x { margin-left: auto; }
-  .dr-body { overflow-y: auto; padding: 18px 22px calc(26px + var(--safe-bottom)); flex: 1; }
-  .dr-sec { margin-bottom: 20px; }
+  .dr-body { overflow-y: auto; padding: 0 22px calc(26px + var(--safe-bottom)); flex: 1; }
+  .dr-sec { margin-bottom: 20px; scroll-margin-top: 54px; }
+  .dr-sec:first-of-type { margin-top: 4px; }
+  .dr-nav { position: sticky; top: 0; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 -22px 16px; padding: 12px 22px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .dr-nav button { font: inherit; font-size: 12px; font-weight: 700; letter-spacing: .01em; color: var(--ink-soft); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; white-space: nowrap; transition: all .14s; }
+  .dr-nav button:hover { color: var(--rose); border-color: var(--dusty); background: var(--blush); }
   .dr-sec-t { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; margin-bottom: 10px; }
   .dr-card { background: var(--surface); border: 1px solid var(--line); border-radius: 13px; padding: 4px 14px; }
   .kv { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--hair); font-size: 13.5px; }
@@ -816,6 +820,29 @@ function renderDrawer(){
   }).join('');
 
   var tierName = (state.tiers.find(function(x){return x.id===o.design_tier;})||{}).name||o.design_tier;
+  var isShip = o.fulfillment==='shipping';
+
+  // Sections are built in display order; each gets an id the jump-nav scrolls to.
+  // Shipping/pickup sits right after Status so the label action is reachable up top.
+  var sections = [];
+  sections.push({ id:'sec-status', label:'Status', html:
+    '<div class="dr-sec-t">Status</div><div class="stepper">'+steps+'</div>'+
+    (o.status==='cancelled'?'<div style="margin-top:8px">'+statusPill('cancelled')+' <button class="btn-ghost" data-status="new" style="width:auto;display:inline;padding:0 6px;font-size:12.5px">Reopen</button></div>':
+      '<div style="margin-top:8px;text-align:right"><button class="btn-ghost" data-status="cancelled" style="width:auto;display:inline;padding:4px 6px;font-size:12.5px;color:#C9534A">Cancel order</button></div>') });
+  sections.push({ id:'sec-ship', label:(isShip?'Shipping':'Pickup'), html:
+    '<div class="dr-sec-t">'+(isShip?'Shipping':'Pickup')+'</div>'+fulfil });
+  sections.push({ id:'sec-design', label:'Design', html:
+    '<div class="dr-sec-t">Design</div><div class="dr-card"><div class="kv"><span class="k">Shape</span><span class="v">'+esc(o.nail_shape||'—')+'</span></div><div class="kv"><span class="k">Tier</span><span class="v">'+esc(tierName)+'</span></div></div>'+
+    '<div style="margin-top:10px"><div class="dr-sec-t" style="margin-bottom:8px">Sizes</div><div class="sizes">'+sizeCells+'</div></div>' });
+  if(o.notes){ sections.push({ id:'sec-notes', label:'Notes', html:
+    '<div class="dr-sec-t">Notes</div><div class="notes-box">'+esc(o.notes)+'</div>' }); }
+  sections.push({ id:'sec-photos', label:'Photos', html:
+    '<div class="dr-sec-t">Inspiration</div>'+photosHtml });
+  if(contact){ sections.push({ id:'sec-contact', label:'Contact', html:
+    '<div class="dr-sec-t">Contact</div><div class="dr-card">'+contact+'</div>' }); }
+
+  var navHtml = '<div class="dr-nav">'+sections.map(function(s){ return '<button type="button" data-jump="'+s.id+'">'+s.label+'</button>'; }).join('')+'</div>';
+  var bodyHtml = sections.map(function(s){ return '<div class="dr-sec" id="'+s.id+'">'+s.html+'</div>'; }).join('');
 
   host.innerHTML =
     '<div class="scrim show" data-close></div>'+
@@ -824,34 +851,25 @@ function renderDrawer(){
         '<div><div class="dr-title">'+esc(o.customer_name)+'</div><div class="dr-meta">'+shortId(o)+' · '+fmtDate(o.created_at)+(o.source==='sample'?' · <b style="color:var(--rose)">sample</b>':'')+'</div></div>'+
         '<button class="icon-btn dr-x" data-close>'+I.x+'</button>'+
       '</div>'+
-      '<div class="dr-body">'+
-        '<div class="dr-sec"><div class="dr-sec-t">Status</div><div class="stepper">'+steps+'</div>'+
-          (o.status==='cancelled'?'<div style="margin-top:8px">'+statusPill('cancelled')+' <button class="btn-ghost" data-status="new" style="width:auto;display:inline;padding:0 6px;font-size:12.5px">Reopen</button></div>':
-            '<div style="margin-top:8px;text-align:right"><button class="btn-ghost" data-status="cancelled" style="width:auto;display:inline;padding:4px 6px;font-size:12.5px;color:#C9534A">Cancel order</button></div>')+
-        '</div>'+
-        '<div class="dr-sec"><div class="dr-sec-t">Quote / price</div>'+
-          '<div class="dr-card" style="padding:12px 14px"><div class="kv" style="border:0;padding:4px 0"><span class="k">Tier price</span><span class="v">'+money(o.tier_price)+' <span class="muted">('+esc(tierName)+')</span></span></div>'+
-          '<div class="price-row"><input class="input" id="qPrice" type="number" min="0" step="1" placeholder="Quoted price" value="'+(o.quoted_price!=null?o.quoted_price:'')+'"><button class="btn" id="qSave">Save</button></div></div>'+
-        '</div>'+
-        '<div class="dr-sec"><div class="dr-sec-t">Design</div><div class="dr-card"><div class="kv"><span class="k">Shape</span><span class="v">'+esc(o.nail_shape||'—')+'</span></div><div class="kv"><span class="k">Tier</span><span class="v">'+esc(tierName)+'</span></div></div>'+
-          '<div style="margin-top:10px"><div class="dr-sec-t" style="margin-bottom:8px">Sizes</div><div class="sizes">'+sizeCells+'</div></div></div>'+
-        (o.notes?'<div class="dr-sec"><div class="dr-sec-t">Notes</div><div class="notes-box">'+esc(o.notes)+'</div></div>':'')+
-        '<div class="dr-sec"><div class="dr-sec-t">Inspiration</div>'+photosHtml+'</div>'+
-        (contact?'<div class="dr-sec"><div class="dr-sec-t">Contact</div><div class="dr-card">'+contact+'</div></div>':'')+
-        '<div class="dr-sec"><div class="dr-sec-t">Fulfilment</div>'+fulfil+'</div>'+
-      '</div>'+
+      '<div class="dr-body">'+navHtml+bodyHtml+'</div>'+
       '<div class="dr-foot">'+
         '<button class="btn btn-line" data-close>Close</button>'+
         '<button class="btn btn-danger" data-del="'+o.id+'">'+I.trash+'</button>'+
       '</div>'+
     '</aside>';
 
-  $('#qSave').onclick = function(){
-    var v = $('#qPrice').value.trim();
-    var val = v===''?null:Number(v);
-    updateOrder(id, { quoted_price: val }, 'Quote saved');
-  };
-
+  // Wire the drawer's own controls here so it works whether or not wire() runs after.
+  host.querySelectorAll('[data-jump]').forEach(function(b){
+    b.onclick = function(){
+      var body=host.querySelector('.dr-body'), t=host.querySelector('#'+b.getAttribute('data-jump'));
+      if(!body||!t) return;
+      var top = t.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 54; // clear the sticky nav
+      body.scrollTo({ top: Math.max(0, top), behavior:'smooth' });
+    };
+  });
+  host.querySelectorAll('[data-close]').forEach(function(b){ b.onclick = closeDrawer; });
+  host.querySelectorAll('[data-status]').forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); setStatus(id, b.getAttribute('data-status')); }; });
+  host.querySelectorAll('[data-del]').forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); delOrder(b.getAttribute('data-del')); }; });
   var buyBtn = $('#buyLabel');
   if(buyBtn){ buyBtn.onclick = function(){ buyLabel(id); }; }
 }
