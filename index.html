@@ -666,6 +666,135 @@
     max-width: 34ch;
   }
 
+  /* ── Confirmation (page 1 of 2) ── */
+  .confirm {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: calc(var(--safe-top) + 44px) 30px 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .confirm .recap { margin-top: 18px; }
+
+  /* ── Payment (page 2 of 2) ── */
+  .pay {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 2px 24px 6px;
+    /* Sized to fit common phones without scrolling; scrolls only as a
+       safety net on very short screens so no method is ever clipped. */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pay__lead { text-align: center; }
+  .pay__lead .title { font-size: 25px; margin: 0; }
+  /* The order-code callout — the one thing they must not miss */
+  .paycode {
+    margin: 11px 0 2px;
+    border: 1.5px solid var(--rose-30);
+    background: #FBF1F0;
+    border-radius: 18px;
+    padding: 12px 16px;
+    text-align: center;
+  }
+  .paycode__label {
+    font-family: var(--serif);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--rose);
+    margin-bottom: 6px;
+  }
+  .paycode__amount {
+    font-family: var(--serif);
+    font-size: 37px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .paycode__sub {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    font-weight: 500;
+    margin-top: 6px;
+  }
+  .paycode__div {
+    height: 1px;
+    background: var(--rose-30);
+    opacity: 0.55;
+    margin: 13px 0 11px;
+  }
+  .paycode__codelabel {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .paycode__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    border: 1px solid var(--rose-30);
+    background: #fff;
+    border-radius: 13px;
+    padding: 9px 16px;
+    cursor: pointer;
+    transition: background .15s ease, transform .1s ease;
+  }
+  .paycode__chip:active { transform: scale(0.98); }
+  .paycode__chip.copied { background: #F7E7E6; }
+  .paycode__code {
+    font-size: 21px; font-weight: 700; letter-spacing: 0.06em;
+    color: var(--rose); font-variant-numeric: tabular-nums;
+  }
+  .paycode__ico { display: flex; color: var(--rose); }
+  .paycode__note {
+    font-size: 12.5px; line-height: 1.45; color: var(--ink);
+    margin: 11px auto 0; max-width: 30ch; font-weight: 500;
+  }
+  .paycode__note b { color: var(--rose); font-weight: 700; }
+
+  /* Tap-to-pay method tiles */
+  .paymethods { margin-top: 11px; display: flex; flex-direction: column; gap: 7px; }
+  .paytile {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    width: 100%;
+    text-align: left;
+    text-decoration: none;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 16px;
+    padding: 7px 14px;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: transform .1s ease, box-shadow .2s ease, border-color .15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .paytile:active { transform: scale(0.985); }
+  .paytile__logo { width: 46px; height: 46px; flex-shrink: 0; border-radius: 13px; }
+  .paytile__body { flex: 1; min-width: 0; }
+  .paytile__name { font-size: 15.5px; font-weight: 700; color: var(--ink); }
+  .paytile__handle {
+    font-size: 13px; color: var(--ink-soft); font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;
+  }
+  .paytile__action { display: flex; align-items: center; gap: 5px; flex-shrink: 0; color: var(--rose); }
+  .paytile__action-txt { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; }
+  .paytile.copied { border-color: var(--rose); }
+  .paytile.copied .paytile__action { color: #2BA05A; }
+  .pay__empty {
+    margin-top: 22px; text-align: center; color: var(--ink-soft);
+    font-size: 14px; line-height: 1.55; max-width: 30ch; align-self: center;
+  }
+
   /* ── Step transition ── */
   @keyframes stepIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -968,6 +1097,16 @@
           if (step === 1) render();
         }
       });
+    // Paige's payment handles (RLS returns only enabled methods with a handle set).
+    sb.from('payment_methods').select('id,label,handle').eq('enabled', true).order('sort')
+      .then(function (res) {
+        if (!res.error && res.data) {
+          PAY_METHODS = res.data.filter(function (m) {
+            return PAY_BRAND[m.id] && m.handle && m.handle.trim();
+          });
+          if (step === 6) render();
+        }
+      });
   }
 
   // Photo compression (keeps several photos under FormSubmit's 10MB total)
@@ -989,7 +1128,46 @@
     checkSm:'<svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M4 9.5l3.2 3.2L14 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     instagram: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="2.5" width="19" height="19" rx="5.4" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.8"/><circle cx="17.4" cy="6.6" r="1.25" fill="currentColor"/></svg>',
     truck: '<svg width="19" height="17" viewBox="0 0 20 18" fill="none"><path d="M2 5.5A1.5 1.5 0 013.5 4h7A1.5 1.5 0 0112 5.5V13H2V5.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 7.5h3.2a1.5 1.5 0 011.3.8L18 11v2h-6V7.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="6" cy="14" r="1.6" stroke="currentColor" stroke-width="1.5"/><circle cx="14.5" cy="14" r="1.6" stroke="currentColor" stroke-width="1.5"/></svg>',
+    chevR: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    extern:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 3h7v7M13 3L6.5 9.5M9.5 3.5H4A1.5 1.5 0 002.5 5v7A1.5 1.5 0 004 13.5h7A1.5 1.5 0 0012.5 12V6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
+
+  // ── Payment brand logos (inline SVG tiles, no external requests) ──
+  var PayLogo = {
+    venmo: '<svg class="paytile__logo" viewBox="0 0 46 46" xmlns="http://www.w3.org/2000/svg"><rect width="46" height="46" rx="13" fill="#008CFF"/><text x="23" y="32" text-anchor="middle" font-family="Hanken Grotesk, system-ui, sans-serif" font-size="26" font-weight="800" font-style="italic" fill="#fff">V</text></svg>',
+    zelle: '<svg class="paytile__logo" viewBox="0 0 46 46" xmlns="http://www.w3.org/2000/svg"><rect width="46" height="46" rx="13" fill="#6A1BD4"/><text x="23" y="32" text-anchor="middle" font-family="Hanken Grotesk, system-ui, sans-serif" font-size="25" font-weight="800" font-style="italic" fill="#fff">Z</text></svg>',
+    cashapp: '<svg class="paytile__logo" viewBox="0 0 46 46" xmlns="http://www.w3.org/2000/svg"><rect width="46" height="46" rx="13" fill="#00D54B"/><text x="23" y="32" text-anchor="middle" font-family="Hanken Grotesk, system-ui, sans-serif" font-size="26" font-weight="800" fill="#fff">$</text></svg>',
+    applepay: '<svg class="paytile__logo" viewBox="0 0 46 46" xmlns="http://www.w3.org/2000/svg"><rect width="46" height="46" rx="13" fill="#000"/><g transform="translate(11,10.5) scale(0.98)"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" fill="#fff"/></g></svg>',
+  };
+
+  // How each service behaves on tap. "link" opens the app/site (note pre-filled
+  // where the service supports it); "copy" copies the handle (Zelle + Apple Pay
+  // are completed inside the bank / Messages app, no web deep link).
+  var PAY_BRAND = {
+    venmo: {
+      prefix: '@',
+      strip: /^@/,
+      mode: 'link',
+      url: function (h, code, amount) {
+        return 'https://venmo.com/?txn=pay&audience=private&recipients=' +
+          encodeURIComponent(h) +
+          (amount ? '&amount=' + encodeURIComponent(amount) : '') +
+          '&note=' + encodeURIComponent(code || '');
+      },
+    },
+    cashapp: {
+      prefix: '$',
+      strip: /^\$/,
+      mode: 'link',
+      url: function (h, code, amount) {
+        return 'https://cash.app/$' + encodeURIComponent(h) + (amount ? '/' + encodeURIComponent(amount) : '');
+      },
+    },
+    zelle:    { prefix: '', strip: /^/, mode: 'copy' },
+    applepay: { prefix: '', strip: /^/, mode: 'copy' },
+  };
+  // Methods Paige has set up (loaded from Supabase). Each: { id, label, handle }.
+  var PAY_METHODS = [];
 
   // ── State ──
   var STORAGE_KEY = 'pmn-order-v1';
@@ -1015,7 +1193,7 @@
   }
 
   var init = loadState();
-  var step = init.step;           // 0 welcome · 1 sizing · 2 design · 3 details · 4 thanks · 5 gallery
+  var step = init.step;           // 0 welcome · 1 sizing · 2 design · 3 details · 4 confirm · 5 gallery · 6 payment
   var data = init.data;
   var photos = [];                // { id, url, blob, name } — not persisted
   var showErr = false;
@@ -1023,6 +1201,19 @@
   var lastOrder = null;           // { id, order_no } from the most recent submit
 
   function orderLabel(no) { return 'PM-' + no; }
+
+  // Deposit due now: 50% of the set price, plus a flat $10 for rush shipping.
+  var RUSH_FEE = 10;
+  function selectedTier() {
+    return TIERS.filter(function (t) { return t.id === data.tier; })[0] || TIERS[0];
+  }
+  function isRush() {
+    return data.fulfillment === 'shipping' && data.shipSpeed === 'rush';
+  }
+  function depositAmount() {
+    var price = Number(selectedTier().price) || 0;
+    return price * 0.5 + (isRush() ? RUSH_FEE : 0);
+  }
 
   function persist() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ step: step, data: data })); }
@@ -1060,7 +1251,8 @@
     else if (step === 2) root.appendChild(DesignScreen());
     else if (step === 3) root.appendChild(DetailsScreen());
     else if (step === 5) root.appendChild(GalleryScreen());
-    else root.appendChild(ThanksScreen());
+    else if (step === 6) root.appendChild(PaymentScreen());
+    else root.appendChild(ConfirmationScreen());
     var sc = root.querySelector('.app__scroll');
     if (sc) sc.scrollTop = 0;
   }
@@ -1328,7 +1520,7 @@
           b.classList.toggle('on', b.getAttribute('data-spd') === data.shipSpeed);
         });
         shipWrap.querySelector('[data-spdhint]').textContent =
-          data.shipSpeed === 'rush' ? 'Rush: ready in about a week ($8 fee).' : 'Standard: ready in 2–3 weeks.';
+          data.shipSpeed === 'rush' ? 'Rush: ready in about a week (+$10).' : 'Standard: ready in 2–3 weeks.';
       }
       shipWrap.querySelectorAll('[data-spd]').forEach(function (b) {
         b.onclick = function () { data.shipSpeed = b.getAttribute('data-spd'); persist(); paintSpd(); };
@@ -1403,28 +1595,29 @@
     return app;
   }
 
-  // ── 4 · THANK YOU ──
-  function ThanksScreen() {
+  function resetOrder() {
+    photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
+    photos = [];
+    lastOrder = null;
+    data = blankData();
+    step = 0;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    render();
+  }
+
+  // ── 4 · CONFIRMATION (page 1 of 2) ──
+  function ConfirmationScreen() {
     var firstName = (data.name.trim().split(' ')[0]) || 'lovely';
     var sized = FINGERS.filter(function (f) { return data.sizes[f]; }).length;
     var contact = data.email.trim() || data.phone.trim();
     var tierName = (TIERS.filter(function (t) { return t.id === data.tier; })[0] || TIERS[0]).name;
 
-    var app = el('div', 'app');
+    var app = el('div', 'app step');
     app.innerHTML =
-      '<div class="app__scroll"><div class="thanks">' +
+      '<div class="confirm">' +
         '<div class="thanks__seal" style="color:var(--rose)">' + Icon.check + '</div>' +
         '<h1 class="thanks__title">Order received</h1>' +
-        '<p class="lede" style="text-align:center;margin:14px auto 0;max-width:28ch">Thank you, ' + esc(firstName) + '. I\'ll reach out at <strong style="color:var(--ink);font-weight:600">' + esc(contact) + '</strong> with a price and timing.</p>' +
-        (lastOrder && lastOrder.order_no != null ?
-          '<div class="ordernum">' +
-            '<div class="ordernum__label">Your order number</div>' +
-            '<button class="ordernum__chip" type="button" data-copy="' + esc(orderLabel(lastOrder.order_no)) + '">' +
-              '<span class="ordernum__code">' + esc(orderLabel(lastOrder.order_no)) + '</span>' +
-              '<span class="ordernum__ico">' + Icon.copy + '</span>' +
-            '</button>' +
-            '<p class="ordernum__hint">Add this to your Venmo or Zelle note when you pay, so I can match it to your set.</p>' +
-          '</div>' : '') +
+        '<p class="lede" style="text-align:center;margin:13px auto 0;max-width:28ch">Thank you, ' + esc(firstName) + '. I\'ll confirm your design, price and timing at <strong style="color:var(--ink);font-weight:600">' + esc(contact) + '</strong>.</p>' +
         '<div class="card recap">' +
           recapRow('Tier', tierName) +
           recapRow('Shape', data.shape || 'Noted in person') +
@@ -1432,36 +1625,125 @@
           recapRow('Inspiration', photos.length + ' photo' + (photos.length === 1 ? '' : 's') + ' shared') +
           recapRow('Delivery', data.fulfillment === 'shipping' ? ('Ship · ' + (data.shipSpeed === 'rush' ? 'Rush' : 'Standard')) : 'Booth pickup') +
         '</div>' +
-        '<p class="handle">Tag your set <span style="color:var(--rose);font-weight:600">@paigemadden.nails</span></p>' +
-      '</div></div>' +
-      '<div class="footer"><button class="btn btn--soft" data-reset>Start another order</button></div>';
-    var copyBtn = app.querySelector('[data-copy]');
-    if (copyBtn) {
-      copyBtn.onclick = function () {
-        var codeEl = copyBtn.querySelector('.ordernum__code');
-        var icoEl = copyBtn.querySelector('.ordernum__ico');
+      '</div>' +
+      '<div class="footer">' +
+        '<button class="btn" data-pay>Continue to payment' + Icon.arrow + '</button>' +
+        '<button class="btn btn--soft" data-reset style="margin-top:2px">Start another order</button>' +
+      '</div>';
+    app.querySelector('[data-pay]').onclick = function () { go(6); };
+    app.querySelector('[data-reset]').onclick = resetOrder;
+    return app;
+  }
+
+  // ── 6 · PAYMENT (page 2 of 2) ──
+  function PaymentScreen() {
+    var code = (lastOrder && lastOrder.order_no != null) ? orderLabel(lastOrder.order_no) : null;
+    var deposit = depositAmount();
+    var amountParam = deposit ? String(deposit) : '';
+    var tier = selectedTier();
+    var subline = '50% deposit on your ' + money(Number(tier.price) || 0) + ' ' + tier.name + ' set' +
+      (isRush() ? ' · incl. ' + money(RUSH_FEE) + ' rush' : '');
+
+    var app = el('div', 'app step');
+
+    var bar = el('div', 'topbar');
+    bar.innerHTML =
+      '<div class="iconbtn" data-back style="color:var(--ink)">' + Icon.back + '</div>' +
+      '<div class="progress"><div class="progress__meta">Final step · Payment</div></div>';
+    app.appendChild(bar);
+
+    var body = el('div', 'pay');
+    var tiles = PAY_METHODS.map(function (m) {
+      var brand = PAY_BRAND[m.id];
+      var raw = m.handle.trim();
+      var clean = raw.replace(brand.strip, '');
+      var display = brand.prefix + clean;
+      var logo = PayLogo[m.id] || '';
+      if (brand.mode === 'link') {
+        var href = brand.url(clean, code || '', amountParam);
+        return '<a class="paytile" href="' + esc(href) + '" target="_blank" rel="noopener">' +
+          logo +
+          '<div class="paytile__body"><div class="paytile__name">' + esc(m.label) + '</div>' +
+            '<div class="paytile__handle">' + esc(display) + '</div></div>' +
+          '<span class="paytile__action"><span class="paytile__action-txt">Open</span>' + Icon.extern + '</span>' +
+        '</a>';
+      }
+      return '<button class="paytile" type="button" data-copyhandle="' + esc(raw) + '">' +
+        logo +
+        '<div class="paytile__body"><div class="paytile__name">' + esc(m.label) + '</div>' +
+          '<div class="paytile__handle">' + esc(display) + '</div></div>' +
+        '<span class="paytile__action"><span class="paytile__action-txt">Copy</span>' + Icon.copy + '</span>' +
+      '</button>';
+    }).join('');
+
+    body.innerHTML =
+      '<div class="pay__lead">' +
+        '<h1 class="title">Send your deposit</h1>' +
+      '</div>' +
+      '<div class="paycode">' +
+        '<div class="paycode__label">Pay this deposit now</div>' +
+        '<div class="paycode__amount">' + esc(money(deposit)) + '</div>' +
+        '<div class="paycode__sub">' + esc(subline) + '</div>' +
+        (code ?
+          '<div class="paycode__div"></div>' +
+          '<div class="paycode__codelabel">Add your order number to the note</div>' +
+          '<button class="paycode__chip" type="button" data-copy="' + esc(code) + '">' +
+            '<span class="paycode__code">' + esc(code) + '</span>' +
+            '<span class="paycode__ico">' + Icon.copy + '</span>' +
+          '</button>' +
+          '<p class="paycode__note">Your payment <b>must</b> include <b>' + esc(code) + '</b> so I can match it to your set.</p>'
+          : '') +
+      '</div>' +
+      (PAY_METHODS.length ?
+        '<div class="paymethods">' + tiles + '</div>' :
+        '<p class="pay__empty">I\'ll send you my payment details along with your quote. Nothing to pay just yet 💕</p>');
+    app.appendChild(body);
+
+    var footer = el('div', 'footer');
+    footer.innerHTML = '<button class="btn btn--soft" data-reset>Start another order</button>';
+    app.appendChild(footer);
+
+    // Copy the order code chip
+    var codeBtn = app.querySelector('[data-copy]');
+    if (codeBtn) {
+      codeBtn.onclick = function () {
+        var codeEl = codeBtn.querySelector('.paycode__code');
+        var icoEl = codeBtn.querySelector('.paycode__ico');
         var orig = codeEl.textContent;
-        copyText(copyBtn.getAttribute('data-copy')).then(function () {
-          copyBtn.classList.add('copied');
+        copyText(codeBtn.getAttribute('data-copy')).then(function () {
+          codeBtn.classList.add('copied');
           codeEl.textContent = 'Copied';
           icoEl.innerHTML = Icon.checkSm;
           setTimeout(function () {
-            copyBtn.classList.remove('copied');
+            codeBtn.classList.remove('copied');
             codeEl.textContent = orig;
             icoEl.innerHTML = Icon.copy;
           }, 1500);
         });
       };
     }
-    app.querySelector('[data-reset]').onclick = function () {
-      photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
-      photos = [];
-      lastOrder = null;
-      data = blankData();
-      step = 0;
-      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-      render();
-    };
+    // Copy-handle tiles (Zelle / Apple Pay)
+    app.querySelectorAll('[data-copyhandle]').forEach(function (b) {
+      b.onclick = function () {
+        var txtEl = b.querySelector('.paytile__action-txt');
+        var icoEl = b.querySelector('.paytile__action svg');
+        var orig = txtEl.textContent;
+        copyText(b.getAttribute('data-copyhandle')).then(function () {
+          b.classList.add('copied');
+          txtEl.textContent = 'Copied';
+          if (icoEl) icoEl.outerHTML = Icon.checkSm;
+          setTimeout(function () {
+            b.classList.remove('copied');
+            txtEl.textContent = orig;
+            var ic = b.querySelector('.paytile__action svg');
+            if (ic) ic.outerHTML = Icon.copy;
+          }, 1500);
+        });
+      };
+    });
+
+    app.querySelector('[data-back]').onclick = function () { go(4); };
+    app.querySelector('[data-reset]').onclick = resetOrder;
     return app;
   }
   function copyText(text) {

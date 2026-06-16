@@ -257,6 +257,24 @@
   .btn-danger { width: auto; background: transparent; color: #C9534A; border: 1px solid #F0C8C3; box-shadow: none; flex: none; padding: 0 16px; }
   .btn-danger:hover { background: #FBE9E7; transform: none; box-shadow: none; }
 
+  /* ===================== SETTINGS · PAYMENT HANDLES ===================== */
+  .pm-list { display: flex; flex-direction: column; gap: 14px; padding: 6px 0; }
+  .pm-card { display: flex; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); transition: opacity .15s, border-color .15s; }
+  .pm-card.off { opacity: .55; }
+  .pm-logo { flex: none; width: 46px; height: 46px; }
+  .pm-logo svg { width: 46px; height: 46px; display: block; }
+  .pm-main { flex: 1; min-width: 0; }
+  .pm-top { display: flex; align-items: center; gap: 10px; }
+  .pm-name { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .pm-field { display: flex; gap: 8px; align-items: stretch; margin-top: 10px; }
+  .pm-field .input { flex: 1; }
+  .pm-field .pm-save { width: auto; padding: 0 20px; }
+  .pm-help { font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); margin: 9px 0 0; }
+  .switch { margin-left: auto; flex: none; width: 42px; height: 25px; border-radius: 99px; border: 0; background: var(--line); position: relative; cursor: pointer; transition: background .18s; padding: 0; }
+  .switch.on { background: #2BA05A; }
+  .switch-dot { position: absolute; top: 3px; left: 3px; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .18s; }
+  .switch.on .switch-dot { transform: translateX(17px); }
+
   /* ===================== NOTIFICATIONS ===================== */
   .pop { position: absolute; top: 52px; right: 0; width: 360px; max-width: 90vw; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-pop); z-index: 60; overflow: hidden; transform-origin: top right; }
   .pop-h { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--hair); }
@@ -367,7 +385,7 @@ var FLOW = ['new','quoted','in_progress','ready','completed'];
 /* ───────────────────────── state ───────────────────────── */
 var state = {
   user: null, ready: false, loading: true,
-  orders: [], tiers: [], shapes: [],
+  orders: [], tiers: [], shapes: [], payments: [],
   view: 'dashboard', filter: 'all', q: '',
   range: 30, sidebarOpen: false, notifOpen: false,
   drawerId: null, photos: {}
@@ -446,12 +464,14 @@ function loadAll(){
   return Promise.all([
     sb.from('orders').select('*').order('created_at',{ascending:false}),
     sb.from('design_tiers').select('*'),
-    sb.from('nail_shapes').select('*')
+    sb.from('nail_shapes').select('*'),
+    sb.from('payment_methods').select('*').order('sort')
   ]).then(function(res){
     if(res[0].error) throw res[0].error;
-    state.orders = res[0].data || [];
-    state.tiers  = res[1].data || [];
-    state.shapes = res[2].data || [];
+    state.orders   = res[0].data || [];
+    state.tiers    = res[1].data || [];
+    state.shapes   = res[2].data || [];
+    state.payments = res[3].data || [];
     state.loading = false;
     render();
   }).catch(function(e){
@@ -638,6 +658,80 @@ function viewSimple(title, text){
   return '<div class="view"><div class="panel"><div class="panel-b" style="padding:40px"><div class="panel-t" style="font-size:18px;margin-bottom:8px">'+title+'</div><p class="muted" style="font-size:14px;max-width:520px;line-height:1.6">'+text+'</p></div></div></div>';
 }
 
+/* ───────────────────────── settings ───────────────────────── */
+// Brand logos (inline SVG) + per-method placeholder/help shown in Settings.
+var PAY_BRAND = {
+  venmo:    { logo:'<svg viewBox="0 0 46 46"><rect width="46" height="46" rx="12" fill="#008CFF"/><text x="23" y="32" text-anchor="middle" font-family="Hanken Grotesk,sans-serif" font-size="26" font-weight="800" font-style="italic" fill="#fff">V</text></svg>', placeholder:'@your-venmo', help:'Your Venmo username. Customers tap to open Venmo with your order number pre-filled in the note.' },
+  zelle:    { logo:'<svg viewBox="0 0 46 46"><rect width="46" height="46" rx="12" fill="#6A1BD4"/><text x="23" y="32" text-anchor="middle" font-family="Hanken Grotesk,sans-serif" font-size="25" font-weight="800" font-style="italic" fill="#fff">Z</text></svg>', placeholder:'email or phone', help:'The email or phone linked to your Zelle. Customers copy it into their bank app.' },
+  cashapp:  { logo:'<svg viewBox="0 0 46 46"><rect width="46" height="46" rx="12" fill="#00D54B"/><text x="23" y="32" text-anchor="middle" font-family="Hanken Grotesk,sans-serif" font-size="26" font-weight="800" fill="#fff">$</text></svg>', placeholder:'$yourcashtag', help:'Your $Cashtag. Customers tap to open Cash App at your profile.' },
+  applepay: { logo:'<svg viewBox="0 0 46 46"><rect width="46" height="46" rx="12" fill="#000"/><g transform="translate(11,10.5)"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" fill="#fff"/></g></svg>', placeholder:'phone or email', help:'The phone or email for Apple Pay. Customers copy it to send in Messages.' }
+};
+var PAY_ORDER = ['venmo','zelle','cashapp','applepay'];
+
+function viewSettings(){
+  var methods = PAY_ORDER.map(function(id){
+    return state.payments.find(function(p){return p.id===id;}) || {id:id, label:id, handle:'', enabled:true};
+  });
+  var cards = methods.map(function(m){
+    var b = PAY_BRAND[m.id] || {logo:'',placeholder:'',help:''};
+    var on = m.enabled !== false;
+    return '<div class="pm-card'+(on?'':' off')+'" data-pm="'+m.id+'">'+
+      '<div class="pm-logo">'+b.logo+'</div>'+
+      '<div class="pm-main">'+
+        '<div class="pm-top"><div class="pm-name">'+esc(m.label)+'</div>'+
+          '<button class="switch'+(on?' on':'')+'" data-pm-toggle="'+m.id+'" role="switch" aria-checked="'+(on?'true':'false')+'"><span class="switch-dot"></span></button>'+
+        '</div>'+
+        '<div class="pm-field"><input class="input" data-pm-handle="'+m.id+'" value="'+esc(m.handle||'')+'" placeholder="'+esc(b.placeholder)+'" autocomplete="off" autocapitalize="off" spellcheck="false">'+
+          '<button class="btn pm-save" data-pm-save="'+m.id+'">Save</button></div>'+
+        '<p class="pm-help">'+esc(b.help)+'</p>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  return '<div class="view">'+
+    '<div class="panel" style="max-width:680px">'+
+      '<div class="panel-h"><div class="panel-t">Payment handles'+
+        '<small>Shown on the checkout payment screen. Turn one off to hide it; leave a handle blank and it stays hidden until you fill it in.</small></div></div>'+
+      '<div class="panel-b"><div class="pm-list">'+cards+'</div></div>'+
+    '</div>'+
+    '<div class="panel" style="max-width:680px;margin-top:16px"><div class="panel-b" style="padding:18px"><div class="panel-t" style="font-size:14px;margin-bottom:4px">Account</div><p class="muted" style="font-size:13.5px">Signed in as <b>'+esc(state.user.email)+'</b>. Manage design tiers, nail shapes and pricing from the Supabase dashboard.</p></div></div>'+
+  '</div>';
+}
+
+function togglePayment(id, btn){
+  var card = $('[data-pm="'+id+'"]'); if(!card) return;
+  var on = !btn.classList.contains('on');
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-checked', on?'true':'false');
+  card.classList.toggle('off', !on);
+  sb.from('payment_methods').update({ enabled: on, updated_at: new Date().toISOString() }).eq('id', id)
+    .then(function(r){
+      if(r.error){ toast('Couldn’t update', r.error.message, 'err'); return; }
+      var m = state.payments.find(function(p){return p.id===id;});
+      if(m) m.enabled = on;
+      toast((id.charAt(0).toUpperCase()+id.slice(1))+(on?' shown on checkout':' hidden from checkout'), '', 'ok');
+    });
+}
+
+function savePayment(id, btn){
+  var card = $('[data-pm="'+id+'"]'); if(!card) return;
+  var input = card.querySelector('[data-pm-handle="'+id+'"]');
+  var toggle = card.querySelector('[data-pm-toggle="'+id+'"]');
+  var handle = input.value.trim();
+  var enabled = toggle.classList.contains('on');
+  var orig = btn.textContent;
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+  sb.from('payment_methods').update({ handle: handle || null, enabled: enabled, updated_at: new Date().toISOString() }).eq('id', id)
+    .then(function(r){
+      btn.disabled = false; btn.textContent = orig;
+      if(r.error){ toast('Couldn’t save', r.error.message, 'err'); return; }
+      var m = state.payments.find(function(p){return p.id===id;});
+      if(m){ m.handle = handle || null; m.enabled = enabled; }
+      else { state.payments.push({id:id, handle:handle||null, enabled:enabled}); }
+      toast((PAY_BRAND[id]?id.charAt(0).toUpperCase()+id.slice(1):'Method')+' saved', handle?('Handle: '+handle):'Handle cleared', 'ok');
+    });
+}
+
 /* ───────────────────────── drawer ───────────────────────── */
 function openOrder(id){
   state.drawerId = id;
@@ -676,9 +770,35 @@ function renderDrawer(){
   var fulfil;
   if(o.fulfillment==='shipping'){
     var addr=[o.address_line1, o.address_line2, [o.city,o.region].filter(Boolean).join(', '), o.postal_code].filter(Boolean).join(' · ');
+    var rush = o.ship_speed==='rush';
     fulfil = '<div class="dr-card"><div class="kv"><span class="k">Method</span><span class="v">Shipping'+(o.ship_speed?' · '+o.ship_speed:'')+'</span></div>'+
       '<div class="kv"><span class="k">Ship to</span><span class="v">'+esc(o.ship_to_name||o.customer_name)+'</span></div>'+
       (addr?'<div class="kv"><span class="k">Address</span><span class="v">'+esc(addr)+'</span></div>':'')+'</div>';
+
+    if(o.label_url){
+      // Label already bought — show tracking + a reprint button.
+      fulfil += '<div class="dr-card" style="margin-top:10px">'+
+        '<div class="kv"><span class="k">Carrier</span><span class="v">'+esc(o.carrier||'USPS')+(o.service_level?' · '+esc(o.service_level):'')+'</span></div>'+
+        '<div class="kv"><span class="k">Tracking</span><span class="v">'+(o.tracking_url?'<a href="'+esc(o.tracking_url)+'" target="_blank" rel="noopener">'+esc(o.tracking_number||'Track')+'</a>':esc(o.tracking_number||'—'))+'</span></div>'+
+        '<div class="kv"><span class="k">Postage</span><span class="v">'+money(o.shipping_cost)+'</span></div>'+
+        (o.shipped_at?'<div class="kv"><span class="k">Label bought</span><span class="v">'+fmtDate(o.shipped_at)+'</span></div>':'')+
+        '<a class="btn" href="'+esc(o.label_url)+'" target="_blank" rel="noopener" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">'+I.box+'Print label</a>'+
+      '</div>';
+    } else {
+      // No label yet — parcel inputs + buy button.
+      var pf = function(id,label,val,step,min){ return '<label style="display:flex;flex-direction:column;gap:4px"><span class="muted" style="font-size:11.5px">'+label+'</span><input class="input" id="'+id+'" type="number" min="'+min+'" step="'+step+'" value="'+val+'"></label>'; };
+      fulfil += '<div class="dr-card" style="margin-top:10px">'+
+        '<div class="dr-sec-t" style="margin:0 0 4px">Buy shipping label</div>'+
+        '<div class="muted" style="font-size:12px;margin-bottom:10px">'+(rush?'Rush — buys the quickest Priority/Express rate.':'Standard — buys the cheapest USPS rate.')+'</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+          pf('pWeight','Weight (oz)','3','0.1','0.1')+
+          pf('pLen','Length (in)','6','0.5','1')+
+          pf('pWid','Width (in)','4','0.5','1')+
+          pf('pHt','Height (in)','1','0.5','0.5')+
+        '</div>'+
+        '<button class="btn" id="buyLabel" style="margin-top:12px;width:100%;display:flex;align-items:center;justify-content:center;gap:6px">'+I.truck+'Buy &amp; print label</button>'+
+      '</div>';
+    }
   } else {
     fulfil = '<div class="dr-card"><div class="kv"><span class="k">Method</span><span class="v">Local pickup</span></div></div>';
   }
@@ -731,6 +851,44 @@ function renderDrawer(){
     var val = v===''?null:Number(v);
     updateOrder(id, { quoted_price: val }, 'Quote saved');
   };
+
+  var buyBtn = $('#buyLabel');
+  if(buyBtn){ buyBtn.onclick = function(){ buyLabel(id); }; }
+}
+
+/* ───────────────────────── shipping labels ───────────────────────── */
+function buyLabel(id){
+  var o = state.orders.find(function(x){return x.id===id;});
+  if(!o) return;
+  var num = function(sel, d){ var n=$(sel); var v=n?Number(n.value):NaN; return (isFinite(v)&&v>0)?v:d; };
+  var parcel = { weight:num('#pWeight',3), length:num('#pLen',6), width:num('#pWid',4), height:num('#pHt',1) };
+  var rush = o.ship_speed==='rush';
+  if(!confirm('Buy a '+(rush?'rush (Priority/Express)':'standard (cheapest)')+' USPS label for '+(o.ship_to_name||o.customer_name)+'?\n\nThis charges your Shippo account for the postage.')) return;
+
+  var btn = $('#buyLabel');
+  var reset = function(){ if(btn){ btn.disabled=false; btn.innerHTML=I.truck+'Buy &amp; print label'; } };
+  if(btn){ btn.disabled=true; btn.innerHTML='Buying label…'; }
+
+  sb.functions.invoke('buy-shipping-label', { body:{ order_id:id, parcel:parcel } }).then(function(r){
+    if(r.error){
+      var ctx = r.error.context;
+      if(ctx && typeof ctx.json==='function'){
+        ctx.json().then(function(b){ toast('Label failed', (b&&b.error)||r.error.message, 'err'); }).catch(function(){ toast('Label failed', r.error.message, 'err'); });
+      } else { toast('Label failed', r.error.message||'Could not buy the label', 'err'); }
+      reset(); return;
+    }
+    var d = r.data||{};
+    if(d.error){ toast('Label failed', d.error, 'err'); reset(); return; }
+    var i = state.orders.findIndex(function(x){return x.id===id;});
+    if(i>=0){ state.orders[i]=Object.assign({},state.orders[i],{
+      carrier:d.carrier, service_level:d.service_level, tracking_number:d.tracking_number,
+      tracking_url:d.tracking_url, label_url:d.label_url, shipping_cost:d.shipping_cost,
+      shipped_at:d.shipped_at, shippo_object_id:d.shippo_object_id
+    }); }
+    toast(d.already?'Label already bought':'Label ready', (d.service_level||'USPS')+' · '+money(d.shipping_cost), 'ok');
+    renderDrawer(); render();
+    if(d.label_url){ window.open(d.label_url, '_blank', 'noopener'); }
+  }).catch(function(e){ toast('Label failed', String((e&&e.message)||e), 'err'); reset(); });
 }
 
 /* ───────────────────────── mutations ───────────────────────── */
@@ -804,7 +962,7 @@ function render(){
   var content = state.view==='dashboard'?viewDashboard()
     : state.view==='orders'?viewOrders()
     : state.view==='customers'?viewSimple('Customers','Every order is grouped by customer here in a future update. For now, open any order to see full contact details and reach out by email or phone.')
-    : viewSimple('Settings','Manage your design tiers, nail shapes and pricing from the Supabase dashboard. Account: <b>'+esc(state.user.email)+'</b>.');
+    : viewSettings();
 
   $('#root').innerHTML =
     '<div class="shell">'+
@@ -844,6 +1002,9 @@ function wire(){
   document.querySelectorAll('[data-status]').forEach(function(b){ b.onclick=function(e){ e.stopPropagation(); if(state.drawerId) setStatus(state.drawerId, b.getAttribute('data-status')); }; });
   document.querySelectorAll('[data-close]').forEach(function(b){ b.onclick=closeDrawer; });
   document.querySelectorAll('[data-markall]').forEach(function(b){ b.onclick=function(){ var ids=unseen().map(function(o){return o.id;}); if(ids.length)markSeen(ids); state.notifOpen=false; render(); }; });
+  document.querySelectorAll('[data-pm-save]').forEach(function(b){ b.onclick=function(){ savePayment(b.getAttribute('data-pm-save'), b); }; });
+  document.querySelectorAll('[data-pm-toggle]').forEach(function(b){ b.onclick=function(){ togglePayment(b.getAttribute('data-pm-toggle'), b); }; });
+  document.querySelectorAll('[data-pm-handle]').forEach(function(inp){ inp.onkeydown=function(e){ if(e.key==='Enter'){ var id=inp.getAttribute('data-pm-handle'); var sv=$('[data-pm-save="'+id+'"]'); if(sv) savePayment(id, sv); } }; });
 
   var bell=$('#bell'); if(bell) bell.onclick=function(e){ e.stopPropagation(); state.notifOpen=!state.notifOpen; renderNotif(); };
   var burger=$('#burger'); if(burger) burger.onclick=function(e){ e.stopPropagation(); state.sidebarOpen=!state.sidebarOpen; var s=$('#sidebar'); if(s)s.classList.toggle('open',state.sidebarOpen); };
