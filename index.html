@@ -630,6 +630,26 @@
 
   .sectionlead { padding: 6px 26px 2px; }
 
+  /* ── Inspiration screen ── */
+  .inspo {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 28px 32px 12px;
+  }
+  .inspo__avatar {
+    width: 116px; height: 116px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #fff;
+    border: 3px solid #fff;
+    box-shadow: 0 16px 40px rgba(95,70,63,0.14);
+    margin-bottom: 24px;
+  }
+
   /* ── Brand rail (desktop only; hidden on phones) ── */
   .brandrail { display: none; }
 
@@ -790,6 +810,13 @@
      so your address isn't exposed in the page source. */
   /* ▲▲▲ PASTE YOUR FORMSUBMIT HASHED ENDPOINT HERE ▲▲▲ */
 
+  // Instagram handle used on the inspiration screen + follow links.
+  var INSTAGRAM_HANDLE = 'paigemadden.nails';
+  // Profile photo shown on the inspiration screen. Hosted locally because
+  // Instagram CDN images are blocked from displaying on other sites (CORP).
+  // To update it later, just replace profile.jpg in this folder.
+  var PROFILE_PHOTO_URL = 'profile.jpg';
+
   // ── Config ──
   var FINGERS = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
   var SIZE_OPTS = ['0','1','2','3','4','5','6','7','8','9','10','11'];
@@ -935,7 +962,7 @@
   }
 
   var init = loadState();
-  var step = init.step;           // 0 welcome · 1 sizing · 2 design · 3 details · 4 thanks
+  var step = init.step;           // 0 welcome · 1 sizing · 2 design · 3 details · 4 thanks · 5 gallery
   var data = init.data;
   var photos = [];                // { id, url, blob, name } — not persisted
   var showErr = false;
@@ -976,6 +1003,7 @@
     else if (step === 1) root.appendChild(SizingScreen());
     else if (step === 2) root.appendChild(DesignScreen());
     else if (step === 3) root.appendChild(DetailsScreen());
+    else if (step === 5) root.appendChild(GalleryScreen());
     else root.appendChild(ThanksScreen());
     var sc = root.querySelector('.app__scroll');
     if (sc) sc.scrollTop = 0;
@@ -995,9 +1023,10 @@
       '</div></div>' +
       '<div class="footer">' +
         '<button class="btn" data-start>Start my custom order' + Icon.arrow + '</button>' +
-        '<p class="btn__hint">About 2 minutes · <span style="color:var(--rose);font-weight:600">@paigemadden.nails</span></p>' +
+        '<button class="btn btn--soft" data-gallery style="margin-top:2px">' + Icon.instagram + ' Want some inspo?</button>' +
       '</div>';
     app.querySelector('[data-start]').onclick = function () { go(1); };
+    app.querySelector('[data-gallery]').onclick = function () { go(5); };
     return app;
   }
 
@@ -1358,6 +1387,34 @@
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
+  }
+
+  // ── 5 · INSPIRATION (link out to Instagram) ──
+  function GalleryScreen() {
+    var app = el('div', 'app step');
+
+    var bar = el('div', 'topbar');
+    bar.innerHTML =
+      '<div class="iconbtn" data-back style="color:var(--ink)">' + Icon.back + '</div>' +
+      '<div class="progress"><div class="progress__meta">Inspiration</div></div>';
+    app.appendChild(bar);
+
+    var scroll = el('div', 'app__scroll');
+    scroll.innerHTML =
+      '<div class="inspo">' +
+        '<img class="inspo__avatar" alt="Paige Madden Nails" data-avatar />' +
+        '<div class="eyebrow">Want some inspo?</div>' +
+        '<h1 class="title">See my latest sets</h1>' +
+        '<a class="ig-cta" href="https://instagram.com/' + INSTAGRAM_HANDLE + '" target="_blank" rel="noopener" style="margin-top:22px">' +
+          Icon.instagram + 'Connect with me on Instagram</a>' +
+        '<p class="handle" style="margin-top:18px">@' + INSTAGRAM_HANDLE + '</p>' +
+      '</div>';
+    // Set src as a property so the long signed URL (with &) isn't HTML-parsed.
+    scroll.querySelector('[data-avatar]').src = PROFILE_PHOTO_URL;
+    app.appendChild(scroll);
+
+    app.querySelector('[data-back]').onclick = function () { go(0); };
+    return app;
   }
 
   // ── Image compression ──
